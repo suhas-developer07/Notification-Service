@@ -8,6 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
 )
 
 type SQSClient struct {
@@ -52,7 +53,7 @@ func (q *SQSClient) SendMessage(ctx context.Context, message interface{}) error 
 	return err
 }
 
-func (q *SQSClient) ReceiveMessage(ctx context.Context, max int32) ([]string, error) {
+func (q *SQSClient) ReceiveMessage(ctx context.Context, max int32) ([]types.Message, error) {
 	resp, err := q.client.ReceiveMessage(ctx, &sqs.ReceiveMessageInput{
 		QueueUrl:            &q.queueURL,
 		MaxNumberOfMessages: max,
@@ -62,10 +63,14 @@ func (q *SQSClient) ReceiveMessage(ctx context.Context, max int32) ([]string, er
 	if err != nil {
 		return nil, err
 	}
-	var msgs []string
 
-	for _, m := range resp.Messages {
-		msgs = append(msgs, *m.Body)
-	}
-	return msgs, nil
+	return resp.Messages, nil
+}
+
+func (q *SQSClient) DeleteMessage(ctx context.Context, receiptHandle string) error {
+	_, err := q.client.DeleteMessage(ctx, &sqs.DeleteMessageInput{
+		QueueUrl:      &q.queueURL,
+		ReceiptHandle: &receiptHandle,
+	})
+	return err
 }
