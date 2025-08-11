@@ -17,7 +17,7 @@ type SQSClient struct {
 }
 
 func NewSQSClient(ctx context.Context, queueURL string) (*SQSClient, error) {
-	// LocalStack configuration
+	
 	customResolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
 		return aws.Endpoint{
 			URL:           "http://localhost:4566", // LocalStack endpoint
