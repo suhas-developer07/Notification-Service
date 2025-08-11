@@ -26,7 +26,7 @@ func main() {
 
 	notifcation := models.Notification{
 		ID:      uuid.New().String(),
-		Channel: "email",
+		Channel: "sms",
 		Message: "Hello Dear",
 		Target:  "suhasdeveloper07@gmail.com",
 	}
