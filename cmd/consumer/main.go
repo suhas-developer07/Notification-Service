@@ -15,6 +15,7 @@ import (
 	"github.com/joho/godotenv"
 
 	"github.com/sirupsen/logrus"
+	"github.com/suhas-developer07/notification-service/internal/db"
 	"github.com/suhas-developer07/notification-service/internal/models"
 	"github.com/suhas-developer07/notification-service/internal/notifier"
 	"github.com/suhas-developer07/notification-service/internal/queue"
@@ -78,6 +79,15 @@ func main() {
 		log.Fatal(err)
 	}
 
+	//dynamo db initialization
+	dynamoClient, err := db.NewDynamoDBClient()
+	if err != nil {
+		log.Fatalf("Error creating dynamoDB client", err)
+	}
+
+	if err = dynamoClient.EnsureTableExists(ctx, "Notification"); err != nil {
+		log.Fatalf("Error ensurig table exist", err)
+	}
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
