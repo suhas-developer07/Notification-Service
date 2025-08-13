@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	"github.com/joho/godotenv"
@@ -19,40 +20,49 @@ import (
 	"github.com/suhas-developer07/notification-service/internal/queue"
 )
 
-func handleMessage(ctx context.Context, sqsClient *queue.SQSClient, dbClient *db.DynamoDBClient, msg types.Message) {
+func handleMessage(ctx context.Context, sqsClient *queue.SQSClient, dbClient *db.DynamoDBClient, msg types.Message) error {
 	var notif models.Notification
 	if err := json.Unmarshal([]byte(*msg.Body), &notif); err != nil {
 		logrus.WithError(err).Error("Error unmarshalling message")
-		return
+		_ = sqsClient.DeleteMessage(ctx, *msg.ReceiptHandle)
+		return err
 	}
 
-	// Save the Notification as Pending
+	// Save as Pending
 	if err := dbClient.SaveNotificationStatus(ctx, notif, "Notification"); err != nil {
-		logrus.WithError(err).Error("Error saving notification to DynamoDB")
+		logrus.WithError(err).Error("Error saving notification")
 	}
 
 	// Get correct notifier
 	n := notifier.GetNotification(notif.Channel)
 	if n == nil {
 		logrus.WithField("channel", notif.Channel).Error("No notifier found")
-		_ = dbClient.UpdateNotificationStatus(ctx, notif.ID, "failed", "Notification")
-		return
+		_ = dbClient.UpdateNotificationStatus(ctx, notif.NotificationID, "failed", "Notification")
+
+		// Delete message so it doesn't loop forever
+		_ = sqsClient.DeleteMessage(ctx, *msg.ReceiptHandle)
+		return fmt.Errorf("unknown channel: %s", notif.Channel)
 	}
 
-	// Sending Notification
+	// Send notification
 	if err := n.Send(ctx, notif); err != nil {
 		logrus.WithError(err).Error("Error sending notification")
-		_ = dbClient.UpdateNotificationStatus(ctx, notif.ID, "failed", "Notification")
-		return
+		_ = dbClient.UpdateNotificationStatus(ctx, notif.NotificationID, "failed", "Notification")
+
+		// Could send to DLQ here
+		_ = sqsClient.DeleteMessage(ctx, *msg.ReceiptHandle)
+		return err
 	}
 
-	// Update Notification status as sent
-	_ = dbClient.UpdateNotificationStatus(ctx, notif.ID, "sent", "Notification")
+	// Update status as sent
+	_ = dbClient.UpdateNotificationStatus(ctx, notif.NotificationID, "sent", "Notification")
 
-	// Delete from SQS
+	// Remove from SQS
 	if err := sqsClient.DeleteMessage(ctx, *msg.ReceiptHandle); err != nil {
-		logrus.WithError(err).Error("Error deleting SQS message")
+		return fmt.Errorf("failed to delete SQS message: %w", err)
 	}
+
+	return nil
 }
 
 func main() {
@@ -105,6 +115,11 @@ func main() {
 			msgs, err := sqsClient.ReceiveMessage(ctx, 5)
 			if err != nil {
 				logrus.WithError(err).Error("Error receiving messages from SQS")
+				continue
+			}
+
+			if len(msgs) == 0 {
+				time.Sleep(1 * time.Second)
 				continue
 			}
 

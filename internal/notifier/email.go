@@ -19,9 +19,9 @@ func (e *EmailNotifier) Send(ctx context.Context, n models.Notification) error {
 
 	msg := []byte(fmt.Sprintf(
 		"To: %s\r\nSubject: %s\r\n\r\n%s\r\n",
-		n.Target, n.Message, n.Message,
+		n.Recipient, n.Message, n.Message,
 	))
 
 	addr := fmt.Sprintf("%s:%s", cfg.SMTPHost, cfg.SMTPPort)
-	return smtp.SendMail(addr, auth, cfg.SMTPUser, []string{n.Target}, msg)
+	return smtp.SendMail(addr, auth, cfg.SMTPUser, []string{n.Recipient}, msg)
 }
